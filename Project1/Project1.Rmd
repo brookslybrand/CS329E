@@ -1,0 +1,244 @@
+---
+title: "World Financial Indices"
+author: "Victor Cruz Diaz, Brooks Lybrand, and Saeed Hashmi"
+resource_files:
+- .Renviron
+- .Renviron
+output:
+  html_notebook:
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+runtime: shiny
+---
+This is an R Interactive Document, which uses the [R Markdown](http://rmarkdown.rstudio.com/authoring_basics.html) language to generate HTML. For a brief introduction to R Markdown, please review this [video](https://www.youtube.com/watch?v=DNS7i2m4sB0&feature=youtu.be).
+
+#Load Packages
+This [code chunk](http://rmarkdown.rstudio.com/authoring_rcodechunks.html) loads the packages required to run the R code in the document.
+The last line of this code chunk enables document caching, which is expalined at this [link](http://rmarkdown.rstudio.com/authoring_rcodechunks.html).
+
+```{r setup, echo=FALSE}
+library(tidyverse)
+library(data.world)
+library(DT)
+library(plotly)
+library(lubridate)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Display Session Information
+The [sessionInfo() fuction](https://cran.r-project.org/web/packages/sessioninfo/sessioninfo.pdf) queries and prints information about the current R session including  information about packages, and from where they were installed.
+```{r}
+sessionInfo()
+```
+
+#Retrieve countries from the financial indices dataset
+The following query retrieves the distinct country names from the financial indices dataset at data.world and saves the country names in the country variable.
+```{r}
+project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset" 
+data.world::set_config(cfg_env("DW_API")) 
+counties <- data.world::query(data.world::qry_sql(
+ "   
+	select distinct country_name
+	from cleaned_data 
+ "))
+indices <- data.world::query(data.world::qry_sql(
+ "   
+	select distinct indicator_name
+	from cleaned_data 
+ "),
+dataset = project)
+```
+#####Changed regions for countries 
+
+
+#Create Panel with Select List and Slider
+The following code creates an input panel for the Interactive Document, which has a [select box](https://shiny.rstudio.com/reference/shiny/latest/selectInput.html) for selecting regions (notice - choices is set to the regions variable that was loaded by the previous query), and a [slider](https://shiny.rstudio.com/reference/shiny/latest/sliderInput.html) that will be used when querying the database for the sales data. For a complete list of Shiny function, please see this [link](https://shiny.rstudio.com/reference/shiny/latest/).
+
+```{r}
+inputPanel(
+  selectInput("selectcountry_1", label = "Select Country",choices = countries, multiple=TRUE),
+  selectInput("selectindex_1", label = "Select Index",choices = indices, multiple=TRUE),
+  sliderInput("selectyear_1", label = "Year:", min = 1980, max = 2014, value = c(1980, 2014), step = 1)
+)
+```
+
+#Create Dataframe with region, category, sales, and order_date data
+The following Shiny [eventReactive](https://shiny.rstudio.com/reference/shiny/1.0.1/observeEvent.html) code runs a query that retrieves the region, category, and sales data from the SuperStore database at data.world and saves it in the df variable as a function that returns an R dataframe. This is an example of a data.world parameterized query; details for data.world queries can be found at this [link](https://cran.r-project.org/web/packages/data.world/vignettes/query.html). The "?"s in the query are parameters. The parameters are filled in (in order) by the paramQuery$params statement.
+
+####Look up syntax and fix paramquery...
+```{r}
+
+df <- eventReactive(c(input$selectcountry_1, input$selectindex_1, input$selectyear_1), { 
+  project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset" 
+  data.world::set_config(cfg_env("DW_API")) 
+  paramQuery <- data.world::qry_sql(
+   "   
+  	select county_name, country_code, indicator_index, indicator_code, values, year
+    from cleaned_data s
+    where year between ? and ? and country_name in ()
+order by country_name
+   ")
+  paramQuery$params <- c(input$selectyear_1[1], input$salesyear_1[2], input$selectcountry_1[1], input$selectcountry_1[2], input$selectRegion_1[3], input$selectRegion_1[4])
+  data.world::query(paramQuery, dataset = project)
+}) 
+```
+#####This is where I left of, but I will also do the display data frame part.
+#Create a Regions Variable
+Create a Regions variable with a string constructed from the selected regions in the input$selectRegion_1 variable.This Regions variable will be used in the title of the ggplot below.
+
+```{r}
+Regions <- eventReactive(c(input$selectRegion_1), { 
+  library('stringr')
+  str_c(input$selectRegion_1, collapse=', ')
+})
+```
+
+#Display the Dataframe as a Table
+The following code uses the [DT package's](https://rstudio.github.io/DT/) datatable function to render the dataframe in the df variable as a table. Notice the need to use df() and not df in the function because df contains a function that returns the dataframe.
+
+The [dplyr::mutate() function](http://dplyr.tidyverse.org/reference/mutate.html) is used to add a "quarter" column to the dataframe before it is displayed.
+
+```{r}
+# Notice the need to use df1() below:
+renderDataTable({
+  DT::datatable(df() %>% dplyr::mutate(quarter = lubridate::quarter(order_date)), rownames = FALSE,
+  extensions = list(Responsive = TRUE, FixedHeader = TRUE)
+  )
+})
+```
+
+#Render and Display the Categories Boxplot
+
+Using [ggplotly](https://www.rdocumentation.org/packages/plotly/versions/4.7.1/topics/ggplotly)
+
+```{r}
+tabsetPanel( 
+  tabPanel("Settings:"),# To create a tab panel - see https://shiny.rstudio.com/reference/shiny/latest/tabPanel.html
+  tabPanel("Plot Size", 
+    numericInput("plotWidth_1", "Plot Width:", 800),
+    numericInput("plotHeight_1", "Plot Height:", 600)),
+  tabPanel("Plot Title",
+    textInput("title_1", "Title", "Region Sales"),
+    numericInput("titleFont_1", "Title Font", 10)), 
+  tabPanel("Plot Legend",
+    numericInput("legendTitleSize_1", "Legend Title Size", 10),
+    numericInput("legendItemSize_1", "Legend Item Size", 10),
+    numericInput("legendKeySize_1", "Legend Key Size", 5)), 
+  tabPanel("Axis Labels",
+    textInput("xLabel_1", "x-Axis Label", "Category"),
+    textInput("yLabel_1", "y-Axis Label", "Sales"),
+    numericInput("textFont_1", "textFont:", 10)),
+  tabPanel("Data Size", 
+    numericInput("yDataMin_1", "yData Minimum (Required):", NA),
+    numericInput("yDataMax_1", "yData Maximum (Required):", NA)))
+```
+
+```{r}
+df1 <- eventReactive(c(input$selectRegion_1, input$yDataMin_1, input$yDataMax_1), { 
+  if( ! is.na(input$yDataMin_1) & ! is.na(input$yDataMax_1)) {
+    df() %>% dplyr::filter(between(sales, input$yDataMin_1, input$yDataMax_1))
+  }
+  else {
+    df()
+  }
+})
+```
+
+```{r}
+# Boxplot - see http://ggplot2.tidyverse.org/reference/geom_boxplot.html
+# Notice the need to use df(), and Regions() below:
+renderPlotly({
+  plot = df1() %>% ggplot() + 
+    geom_boxplot(mapping = aes(x = category, y=sales, colour = region)) +
+     
+    theme(plot.title = element_text(size = input$titleFont_1, face = "bold")) + 
+    theme( # Legend Attributes - see https://github.com/tidyverse/ggplot2/wiki/Legend-Attributes
+      legend.title=element_text(size=input$legendTitleSize_1), 
+      legend.text=element_text(size=input$legendItemSize_1),
+      legend.key = element_rect(size = input$legendKeySize_1),
+      legend.key.size = unit(input$legendKeySize_1, 'lines')) +
+    theme(axis.text=element_text(size=input$textFont_1),
+          axis.title=element_text(size=input$textFont_1, face="bold"),
+          axis.text.x = element_text(angle = 90, hjust = 1))  +
+    theme(plot.margin=unit(c(2,1,1,1),"cm")) +
+    scale_y_continuous(labels = scales::comma) + # Disable scientific notation
+    ggtitle(paste(Regions(), input$title_1)) +
+    xlab(input$xLabel_1) + ylab(input$yLabel_1)
+  ggplotly(plot, tooltip = c("sales"), session="knitr", width = input$plotWidth_1, height = input$plotHeight_1)
+})
+```
+
+```{r}
+inputPanel( 
+  textInput("dummy_2", "", "")
+  )
+```
+
+```{r}
+inputPanel( 
+  textInput("dummy_2", "", "")
+  )
+```
+   
+#Render and Display the Quarters Boxplot
+
+Using [ggplotly](https://www.rdocumentation.org/packages/plotly/versions/4.7.1/topics/ggplotly)
+
+```{r}
+tabsetPanel( 
+  tabPanel("Settings:"),# To create a tab panel - see https://shiny.rstudio.com/reference/shiny/latest/tabPanel.html
+  tabPanel("Plot Size", 
+    numericInput("plotWidth_2", "Plot Width:", 800),
+    numericInput("plotHeight_2", "Plot Height:", 600)),
+  tabPanel("Plot Title",
+    textInput("title_2", "Title", "Region Sales"),
+    numericInput("titleFont_2", "Title Font", 10)), 
+  tabPanel("Plot Legend",
+    numericInput("legendTitleSize_2", "Legend Title Size", 10),
+    numericInput("legendItemSize_2", "Legend Item Size", 10),
+    numericInput("legendKeySize_2", "Legend Key Size", 5)), 
+  tabPanel("Axis Labels",
+    textInput("xLabel_2", "x-Axis Label", "Quarter"),
+    textInput("yLabel_2", "y-Axis Label", "Sales"),
+    numericInput("textFont_2", "textFont:", 10)),
+  tabPanel("Data Size", 
+    numericInput("yDataMin_2", "yData Minimum (Required):", NA),
+    numericInput("yDataMax_2", "yData Maximum (Required):", NA)))
+```
+
+```{r}
+df2 <- eventReactive(c(input$selectRegion_1, input$yDataMin_2, input$yDataMax_2), { 
+  if( ! is.na(input$yDataMin_2) & ! is.na(input$yDataMax_2)) {
+    df() %>% dplyr::filter(between(sales, input$yDataMin_2, input$yDataMax_2))
+  }
+  else {
+    df()
+  }
+})
+```
+
+```{r}
+# Boxplot - see http://ggplot2.tidyverse.org/reference/geom_boxplot.html
+# Notice the need to use df(), and Regions() below:
+renderPlotly({
+  plot = df2() %>% ggplot() + 
+    geom_boxplot(mapping = aes(x = as.factor(paste(lubridate::year(order_date),"_",lubridate::quarter(order_date))), y=sales, colour = region)) +
+     
+    theme(plot.title = element_text(size = input$titleFont_2, face = "bold")) + 
+    theme( # Legend Attributes - see https://github.com/tidyverse/ggplot2/wiki/Legend-Attributes
+      legend.title=element_text(size=input$legendTitleSize_2), 
+      legend.text=element_text(size=input$legendItemSize_2),
+      legend.key = element_rect(size = input$legendKeySize_2),
+      legend.key.size = unit(input$legendKeySize_2, 'lines')) +
+    theme(axis.text=element_text(size=input$textFont_2),
+          axis.title=element_text(size=input$textFont_2, face="bold"),
+          axis.text.x = element_text(angle = 90, hjust = 1))  +
+    theme(plot.margin=unit(c(2,1,1,1),"cm")) +
+    scale_y_continuous(labels = scales::comma) + # Disable scientific notation
+    ggtitle(paste(Regions(), input$title_2)) +
+    xlab(input$xLabel_2) + ylab(input$yLabel_2)
+  ggplotly(plot, tooltip = c("sales"), session="knitr", width = input$plotWidth_2, height = input$plotHeight_2)
+})
+```
