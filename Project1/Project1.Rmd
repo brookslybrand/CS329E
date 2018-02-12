@@ -36,13 +36,14 @@ sessionInfo()
 #Retrieve countries from the financial indices dataset
 The following query retrieves the distinct country names from the financial indices dataset at data.world and saves the country names in the country variable.
 ```{r}
-project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset" 
+project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset"
 data.world::set_config(cfg_env("DW_API")) 
-counties <- data.world::query(data.world::qry_sql(
+countries <- data.world::query(data.world::qry_sql(
  "   
 	select distinct country_name
 	from cleaned_data 
- "))
+ "),
+dataset = project)
 indices <- data.world::query(data.world::qry_sql(
  "   
 	select distinct indicator_name
