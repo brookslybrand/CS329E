@@ -1,0 +1,344 @@
+---
+title: "World Financial Indices"
+author: "Victor Cruz Diaz, Brooks Lybrand, and Saeed Hashmi"
+resource_files:
+- .Renviron
+- .Renviron
+output:
+  html_notebook:
+    code_folding: hide
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+runtime: shiny
+---
+This is an R Interactive Document, which uses the [R Markdown](http://rmarkdown.rstudio.com/authoring_basics.html) language to generate HTML. For a brief introduction to R Markdown, please review this [video](https://www.youtube.com/watch?v=DNS7i2m4sB0&feature=youtu.be).
+#Data.world Project
+Our project can be located [here](https://data.world/cruzdiaz-victor/s-18-edv-project-1)
+
+This project explores several different financial indexes across 35 years for most countries in the world.
+
+#Load Packages
+
+```{r setup, echo=FALSE}
+library(tidyverse)
+library(data.world)
+library(DT)
+library(plotly)
+library(lubridate)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Display Session Information
+```{r}
+sessionInfo()
+```
+
+#Retrieve countries from the financial indices dataset
+The following query retrieves the distinct country names from the financial indices dataset at data.world and saves the country names in the country variable.
+```{r}
+project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset"
+data.world::set_config(cfg_env("DW_API"))
+countries <- data.world::query(data.world::qry_sql(
+ "   
+	select distinct country_name
+	from cleaned_data
+ "),
+dataset = project)
+indices <- data.world::query(data.world::qry_sql(
+ "   
+	select distinct indicator_name
+	from cleaned_data
+ "),
+dataset = project)
+```
+
+#Create Panel with Select List and Slider
+Select the countries, financial indices, and years to query.
+
+```{r}
+inputPanel(
+  selectInput("selectCountry_1", label = "Select Country",choices = countries, multiple=TRUE, selected=c("United States", "Mexico", "Canada")),
+  selectInput("selectIndex_1", label = "Select Index",choices = indices, multiple=TRUE, selected=c("Financial Development Index", "Financial Institutions Access Index", "Financial Markets Index")),
+  sliderInput("selectYear_1", label = "Year:", min = 1980, max = 2014, value = c(1980, 2014), step = 1)
+)
+```
+
+#Create Dataframe with region, category, sales, and order_date data
+Fetch the results from data.world based on an SQL query created from the parameters selected above.
+
+```{r}
+df <- eventReactive(c(input$selectCountry_1, input$selectIndex_1, input$selectYear_1), {
+  project <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset"
+  data.world::set_config(cfg_env("DW_API"))
+  paramQuery <- data.world::qry_sql(
+    paste(
+      "
+  	    select country_name, country_code, indicator_name, indicator_code, values, year
+        from cleaned_data c
+        where cast(year as integer) between
+      ", input$selectYear_1[1], "and", input$selectYear_1[2],
+      "and country_name in (", paste("\"", paste(input$selectCountry_1, collapse="\", \""), "\"", sep=""), ")",
+      "and indicator_name in (", paste("\"", paste(input$selectIndex_1, collapse="\", \""), "\"", sep=""), ")"
+    )
+   )
+  data.world::query(paramQuery, dataset = project)
+})
+```
+#Create a Countries Variable
+Create a Countries variable with a string constructed from the selected regions in the input$selectRegion_1 variable.This Countries variable will be used in the title of the ggplot below.
+
+```{r}
+Countries <- eventReactive(c(input$selectCountry_1), {
+  library('stringr')
+  str_c(input$selectCountry_1, collapse=', ')
+})
+```
+
+#Display the Dataframe as a Table
+Here are the results of the query:
+
+```{r}
+# Notice the need to use df1() below:
+renderDataTable({
+  # DT::datatable(df() %>% dplyr::mutate(year = lubridate:year(order_date)), rownames = FALSE,
+  DT::datatable(df(), rownames = FALSE, extensions = list(Responsive = TRUE, FixedHeader = TRUE))
+})
+```
+
+#Render and Display the Years Boxplot
+
+```{r}
+tabsetPanel(
+  tabPanel("Settings:"),# To create a tab panel - see https://shiny.rstudio.com/reference/shiny/latest/tabPanel.html
+  tabPanel("Plot Size",
+    numericInput("plotWidth_1", "Plot Width:", 800),
+    numericInput("plotHeight_1", "Plot Height:", 600)),
+  tabPanel("Plot Title",
+    textInput("title_1", "Title", "Index Values"),
+    numericInput("titleFont_1", "Title Font", 10)),
+  tabPanel("Plot Legend",
+    numericInput("legendTitleSize_1", "Legend Title Size", 10),
+    numericInput("legendItemSize_1", "Legend Item Size", 10)),
+  tabPanel("Axis Labels",
+    textInput("xLabel_1", "x-Axis Label", "Years"),
+    textInput("yLabel_1", "y-Axis Label", "Values"),
+    numericInput("textFont_1", "textFont:", 10)),
+  tabPanel("Data Size",
+    numericInput("yDataMin_1", "yData Minimum (Required):", NA, min=0, step = 0.05),
+    numericInput("yDataMax_1", "yData Maximum (Required):", NA, min=0, step = 0.05)))
+```
+
+```{r}
+df1 <- eventReactive(c(input$selectCountry_1, input$selectIndex_1 ,input$selectYear_1, input$yDataMin_1, input$yDataMax_1), {
+  if( ! is.na(input$yDataMin_1) & ! is.na(input$yDataMax_1)) {
+    df() %>% dplyr::filter(between(values, input$yDataMin_1, input$yDataMax_1))
+  }
+  else {
+    df()
+  }
+})
+```
+
+```{r}
+# Boxplot - see http://ggplot2.tidyverse.org/reference/geom_boxplot.html
+# Notice the need to use df(), and Countries() below:
+renderPlotly({
+  plot = df1() %>% ggplot() +
+    geom_boxplot(mapping = aes(x = year, y=values, colour = country_name)) +
+
+    theme(plot.title = element_text(size = input$titleFont_1, face = "bold")) +
+    theme( # Legend Attributes - see https://github.com/tidyverse/ggplot2/wiki/Legend-Attributes
+      legend.title=element_text(size=input$legendTitleSize_1),
+      legend.text=element_text(size=input$legendItemSize_1)) +
+    theme(axis.text=element_text(size=input$textFont_1),
+          axis.title=element_text(size=input$textFont_1, face="bold"),
+          axis.text.x = element_text(angle = 90, hjust = 1)) +
+    theme(plot.margin=unit(c(2,1,1,1),"cm")) +
+    scale_y_continuous(labels = scales::comma) + # Disable scientific notation
+    ggtitle(paste(Countries(), input$title_1)) +
+    xlab(input$xLabel_1) + ylab(input$yLabel_1) +
+    theme_bw()
+  ggplotly(plot, tooltip = c("values"), session="knitr", width = input$plotWidth_1, height = input$plotHeight_1)
+})
+```
+
+<br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
+
+#Render and Display Countries' Financial Indices Boxplots
+
+```{r}
+tabsetPanel(
+  tabPanel("Settings:"),# To create a tab panel - see https://shiny.rstudio.com/reference/shiny/latest/tabPanel.html
+  tabPanel("Plot Size",
+    numericInput("plotWidth_1", "Plot Width:", 800),
+    numericInput("plotHeight_1", "Plot Height:", 600)),
+  tabPanel("Plot Title",
+    textInput("title_1", "Title", "Index Values"),
+    numericInput("titleFont_1", "Title Font", 10)),
+  tabPanel("Plot Legend",
+    numericInput("legendTitleSize_1", "Legend Title Size", 10),
+    numericInput("legendItemSize_1", "Legend Item Size", 10)),
+  tabPanel("Axis Labels",
+    textInput("xLabel_1", "x-Axis Label", "Years"),
+    textInput("yLabel_1", "y-Axis Label", "Values"),
+    numericInput("textFont_1", "textFont:", 10)),
+  tabPanel("Data Size", 
+    numericInput("yDataMin_1", "yData Minimum (Required):", NA, min=0, step = 0.05),
+    numericInput("yDataMax_1", "yData Maximum (Required):", NA, min=0, step = 0.05)))
+```
+
+```{r}
+df1 <- eventReactive(c(input$selectCountry_1, input$selectIndex_1 ,input$selectYear_1, input$yDataMin_1, input$yDataMax_1), {
+  if( ! is.na(input$yDataMin_1) & ! is.na(input$yDataMax_1)) {
+    df() %>% dplyr::filter(between(values, input$yDataMin_1, input$yDataMax_1))
+  }
+  else {
+    df()
+  }
+})
+```
+```{r}
+# Boxplot - see http://ggplot2.tidyverse.org/reference/geom_boxplot.html
+# Notice the need to use df(), and Countries() below:
+renderPlotly({
+  plot = df1() %>% ggplot() +
+    geom_boxplot(mapping = aes(x = country_name, y = values, colour = country_name)) +
+
+    theme(plot.title = element_text(size = input$titleFont_1, face = "bold")) +
+    theme( # Legend Attributes - see https://github.com/tidyverse/ggplot2/wiki/Legend-Attributes
+      legend.title=element_text(size=input$legendTitleSize_1),
+      legend.text=element_text(size=input$legendItemSize_1)) +
+    theme(axis.text=element_text(size=input$textFont_1),
+          axis.title=element_text(size=input$textFont_1, face="bold"),
+          axis.text.x = element_text(angle = 90, hjust = 1)) +
+    theme(plot.margin=unit(c(2,1,1,1),"cm")) +
+    scale_y_continuous(labels = scales::comma) + # Disable scientific notation
+    ggtitle(paste(Countries(), input$title_1)) +
+    xlab(input$xLabel_1) + ylab(input$yLabel_1) +
+    theme_bw()
+  ggplotly(plot, tooltip = c("values"), session="knitr", width = input$plotWidth_1, height = input$plotHeight_1)
+})
+```
+
+<br/><br/><br/><br/><br/><br/><br/><br/><br/><br/>
+
+# Insights
+Here is the link to the [insights on data.world](https://data.world/cruzdiaz-victor/s-18-edv-project-1/insights). 
+
+
+
+
+
+#Summary of our insights regarding outliers in the data 
+
+Looking at the data, I saw outliers which made me curious as to why they shot up to such an abnormal level. After doing some research, I found out that the Republic of Congo, Mali, Libya, and other nations experienced civil unrest which caused thses abnormalities in the data. Almost every sharp spike or decrease in the values replict the current state of the government in those nations. 
+
+```{r}
+project_3 <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset"
+data.world::set_config(cfg_env("DW_API"))
+countries_3 <- data.world::query(data.world::qry_sql(
+ "   
+	select distinct country_name
+	from cleaned_data
+ "),
+dataset = project_3)
+Values_3 <- data.world::query(data.world::qry_sql(
+ "   
+	select values
+	from cleaned_data
+ "),
+dataset = project_3)
+```
+
+
+```{r}
+Countries_3 <- eventReactive(c(input$selectCountry_3), {
+  library('stringr')
+  str_c(input$selectCountry_3, collapse=', ')
+})
+```
+
+```{r}
+df3 <- eventReactive(c(input$selectCountry_3, input$selectValues_3, input$selectYear_3), {
+  project_3 <- "https://data.world/cruzdiaz-victor/s18-edv-project-1-dataset"
+  data.world::set_config(cfg_env("DW_API"))
+  paramQuery <- data.world::qry_sql(
+    paste(
+      "
+  	    select country_name, values, year
+        from cleaned_data c
+        where cast(year as integer) between
+      ", input$selectYear_3[1], "and", input$selectYear_3[2],
+      "and country_name in (", paste("\"", paste(input$selectCountry_3, collapse="\", \""), "\"", sep=""), ")"
+      
+    )
+   )
+  data.world::query(paramQuery, dataset = project_3)
+})
+```
+
+
+```{r}
+inputPanel(
+  selectInput("selectCountry_3", label = "Select Country",choices = countries_3, multiple=TRUE, selected=c("Mali", "Libya", "Lebanon","Kyrgyz Republic","Latvia","Lesotho","Liberia","Luxembourg","Madagascar","Malawi","Malysia","Malta","Maurianai","Mexico","Mexico","Mongolia","Morocco","Mozambique")),
+
+  sliderInput("selectYear_3", label = "Year:", min = 1980, max = 2014, value = c(2006), step = 1)
+)
+```
+
+
+```{r}
+tabsetPanel(
+  tabPanel("Settings:"),
+  tabPanel("Plot Size",
+    numericInput("plotWidth_3", "Plot Width:", 800),
+    numericInput("plotHeight_3", "Plot Height:", 600)),
+  tabPanel("Plot Title",
+    textInput("title_3", "Title", "Index Values"),
+    numericInput("titleFont_3", "Title Font", 10)),
+  tabPanel("Plot Legend",
+    numericInput("legendTitleSize_3", "Legend Title Size", 10),
+    numericInput("legendItemSize_3", "Legend Item Size", 10)),
+  tabPanel("Axis Labels",
+    textInput("xLabel_3", "x-Axis Label", "Years"),
+    textInput("yLabel_3", "y-Axis Label", "Values"),
+    numericInput("textFont_3", "textFont:", 10)),
+  tabPanel("Data Size", 
+    numericInput("yDataMin_3", "yData Minimum (Required):", NA, min=0, step = 0.05),
+    numericInput("yDataMax_3", "yData Maximum (Required):", NA, min=0, step = 0.05)))
+```
+
+```{r}
+df4 <- eventReactive(c(input$selectCountry_3, input$selectValues_3 ,input$selectYear_3, input$yDataMin_3, input$yDataMax_3), {
+  if( ! is.na(input$yDataMin_3) & ! is.na(input$yDataMax_3)) {
+    df3() %>% dplyr::filter(between(values_3, input$yDataMin_3, input$yDataMax_3))
+  }
+  else {
+    df3()
+  }
+})
+```
+
+
+```{r}
+
+renderPlotly({
+  plot = df4() %>% ggplot() +
+    geom_boxplot(mapping = aes(x = country, y = values)) +
+
+    theme(plot.title = element_text(size = input$titleFont_3, face = "bold")) +
+    theme( 
+      legend.title=element_text(size=input$legendTitleSize_3),
+      legend.text=element_text(size=input$legendItemSize_3)) +
+    theme(axis.text=element_text(size=input$textFont_3),
+          axis.title=element_text(size=input$textFont_3, face="bold"),
+          axis.text.x = element_text(angle = 90, hjust = 1)) +
+    theme(plot.margin=unit(c(2,1,1,1),"cm")) +
+    scale_y_continuous(labels = scales::comma) + 
+    ggtitle(paste(Countries_3(), input$title_3)) +
+    xlab(input$xLabel_3) + ylab(input$yLabel_3) +
+    theme_bw()
+  ggplotly(plot, tooltip = c("values"), session="knitr", width = input$plotWidth_3, height = input$plotHeight_3)
+})
+```
