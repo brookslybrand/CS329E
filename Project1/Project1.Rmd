@@ -180,6 +180,12 @@ tabsetPanel(
     numericInput("legendTitleSize_1", "Legend Title Size", 10),
     numericInput("legendItemSize_1", "Legend Item Size", 10)),
   tabPanel("Axis Labels",
+    textInput("xLabel_1", "x-Axis Label", "Years"),
+    textInput("yLabel_1", "y-Axis Label", "Values"),
+    numericInput("textFont_1", "textFont:", 10)),
+  tabPanel("Data Size", 
+    numericInput("yDataMin_1", "yData Minimum (Required):", NA, min=0, step = 0.05),
+    numericInput("yDataMax_1", "yData Maximum (Required):", NA, min=0, step = 0.05)))
 ```
 
 ```{r}
