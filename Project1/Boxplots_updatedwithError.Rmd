@@ -266,7 +266,7 @@ df3 <- eventReactive(c(input$selectCountry_3, input$selectValues_3, input$select
   paramQuery <- data.world::qry_sql(
     paste(
       "
-  	    select country_name, values, year
+  	    select country_name, values, year, indicator_name
         from cleaned_data c
         where cast(year as integer) between
       ", input$selectYear_3[1], "and", input$selectYear_3[2],
@@ -281,9 +281,9 @@ df3 <- eventReactive(c(input$selectCountry_3, input$selectValues_3, input$select
 
 ```{r}
 inputPanel(
-  selectInput("selectCountry_3", label = "Select Country",choices = countries_3, multiple=TRUE, selected=c("Mali", "Libya", "Lebanon","Kyrgyz Republic","Latvia","Lesotho","Liberia","Luxembourg","Madagascar","Malawi","Malysia","Malta","Maurianai","Mexico","Mexico","Mongolia","Morocco","Mozambique")),
+  selectInput("selectCountry_3", label = "Select Country",choices = countries_3, multiple=TRUE, selected=c("Mali", "Libya", "Lebanon","Latvia","Lesotho","Liberia","Luxembourg","Madagascar","Malawi","Malysia","Malta","Maurianai","Mexico","United States")),
 
-  sliderInput("selectYear_3", label = "Year:", min = 1980, max = 2014, value = c(2006), step = 1)
+  sliderInput("selectYear_3", label = "Year:", min = 1980, max = 2014, value = c(2006,2006), step = 1)
 )
 ```
 
@@ -295,22 +295,22 @@ tabsetPanel(
     numericInput("plotWidth_3", "Plot Width:", 800),
     numericInput("plotHeight_3", "Plot Height:", 600)),
   tabPanel("Plot Title",
-    textInput("title_3", "Title", "Index Values"),
-    numericInput("titleFont_3", "Title Font", 10)),
+    textInput("title_3", "Title","2006"),
+    numericInput("titleFont_3", "Title Font", 20)),
   tabPanel("Plot Legend",
     numericInput("legendTitleSize_3", "Legend Title Size", 10),
     numericInput("legendItemSize_3", "Legend Item Size", 10)),
   tabPanel("Axis Labels",
-    textInput("xLabel_3", "x-Axis Label", "Years"),
+    textInput("xLabel_3", "x-Axis Label", "Countries"),
     textInput("yLabel_3", "y-Axis Label", "Values"),
     numericInput("textFont_3", "textFont:", 10)),
   tabPanel("Data Size", 
-    numericInput("yDataMin_3", "yData Minimum (Required):", NA, min=0, step = 0.05),
-    numericInput("yDataMax_3", "yData Maximum (Required):", NA, min=0, step = 0.05)))
+    numericInput("yDataMin_3", "yData Minimum (Required):", NA, min=0, step = 0),
+    numericInput("yDataMax_3", "yData Maximum (Required):", NA, min=0, step = 0.55)))
 ```
 
 ```{r}
-df4 <- eventReactive(c(input$selectCountry_3, input$selectValues_3 ,input$selectYear_3, input$yDataMin_3, input$yDataMax_3), {
+df4 <- eventReactive(c(input$selectCountry_3, input$selectValues_3 ,input$selectYear_3 ,input$yDataMin_3, input$yDataMax_3), {
   if( ! is.na(input$yDataMin_3) & ! is.na(input$yDataMax_3)) {
     df3() %>% dplyr::filter(between(values_3, input$yDataMin_3, input$yDataMax_3))
   }
@@ -325,7 +325,7 @@ df4 <- eventReactive(c(input$selectCountry_3, input$selectValues_3 ,input$select
 
 renderPlotly({
   plot = df4() %>% ggplot() +
-    geom_boxplot(mapping = aes(x = country, y = values)) +
+    geom_boxplot(mapping = aes(x = country_name, y = values )) +
 
     theme(plot.title = element_text(size = input$titleFont_3, face = "bold")) +
     theme( 
@@ -333,10 +333,10 @@ renderPlotly({
       legend.text=element_text(size=input$legendItemSize_3)) +
     theme(axis.text=element_text(size=input$textFont_3),
           axis.title=element_text(size=input$textFont_3, face="bold"),
-          axis.text.x = element_text(angle = 90, hjust = 1)) +
+          axis.text.x = element_text(angle = 150, hjust = 1)) +
     theme(plot.margin=unit(c(2,1,1,1),"cm")) +
     scale_y_continuous(labels = scales::comma) + 
-    ggtitle(paste(Countries_3(), input$title_3)) +
+    ggtitle(paste("Historic Outliers For The Year", input$title_3)) +
     xlab(input$xLabel_3) + ylab(input$yLabel_3) +
     theme_bw()
   ggplotly(plot, tooltip = c("values"), session="knitr", width = input$plotWidth_3, height = input$plotHeight_3)
